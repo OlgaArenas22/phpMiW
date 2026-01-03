@@ -336,11 +336,11 @@ paths:
             Location:
               $ref: '#/components/headers/Location'
         '400':
-          $ref: '#/components/responses/400_BadRequest_Response'
+          $ref: '#/components/responses/400_Result_BadRequest_Response'
         '401':
           $ref: '#/components/responses/401_Unauthorized_Response'
         '422':
-          $ref: '#/components/responses/422_UnprocessableEntity_Response'
+          $ref: '#/components/responses/422_Result_UnprocessableEntity_Response'
     options:
       tags: [ '📊 Results' ]
       summary: Provides the list of HTTP supported methods.
@@ -559,6 +559,27 @@ components:
           schema: { $ref: '#/components/schemas/Message' }
           examples:
             response-422: { $ref: '#/components/examples/response-422' }
+    400_Result_BadRequest_Response:
+      description: "`BAD REQUEST`: invalid result or time format"
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Message' }
+          examples:
+            response-400-result:
+              value:
+                code: 400
+                message: 'BAD REQUEST: invalid result or time format'
+    422_Result_UnprocessableEntity_Response:
+      description: "`UNPROCESSABLE ENTITY`: result is left out"
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Message' }
+          examples:
+            response-422-result:
+              value:
+                code: 422
+                message: 'UNPROCESSABLE ENTITY: result is left out'
+
 
   requestBodies:
     UserRequestBody:
