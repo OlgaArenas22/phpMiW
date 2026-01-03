@@ -399,6 +399,35 @@ paths:
           $ref: '#/components/responses/403_Forbidden_Response'
         '404':
           $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    put:
+      tags: [ '📊 Results' ]
+      summary: Updates the Result resource.
+      description: 'Updates the result identified by `resultId`.'
+      operationId: api_results_put
+      parameters:
+        - $ref: '#/components/parameters/resultId'
+        - $ref: '#/components/parameters/ifMatchParam'
+      security:
+        - MiWApiSecurity: []
+      requestBody:
+        $ref: '#/components/requestBodies/ResultRequestBody'
+      responses:
+        '209':
+          description: '`Content Returned`: result previously existed and is now updated'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Result'
+        '400':
+          $ref: '#/components/responses/400_Result_BadRequest_Response'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '403':
+          $ref: '#/components/responses/403_Forbidden_Response'
+        '404':
+          $ref: '#/components/responses/404_Resource_Not_Found_Response'
+        '412':
+          $ref: '#/components/responses/412_Precondition_Failed_Response'
     delete:
       tags: ['📊 Results' ]
       summary: Removes the Result resource.
