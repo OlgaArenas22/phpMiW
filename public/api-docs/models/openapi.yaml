@@ -374,6 +374,24 @@ paths:
           $ref: '#/components/responses/403_Forbidden_Response'
         '404':
           $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    delete:
+      tags: ['📊 Results' ]
+      summary: Removes the Result resource.
+      description: 'Deletes the result identified by `resultId`.'
+      operationId: api_results_delete
+      parameters:
+        - $ref: '#/components/parameters/resultId'
+      security:
+        - MiWApiSecurity: []
+      responses:
+        '204':
+          description: 'Result deleted &lt;Response body is empty&gt;'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '403':
+          $ref: '#/components/responses/403_Forbidden_Response'
+        '404':
+          $ref: '#/components/responses/404_Resource_Not_Found_Response'
     options:
       tags: [ '📊 Results' ]
       summary: Provides the list of HTTP supported methods.
