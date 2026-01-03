@@ -51,7 +51,7 @@ class ApiResultsCommandController extends AbstractController implements ApiResul
 
         $postData = $request->getPayload();
 
-        // 422 si falta "result" o viene vacío
+        // 422 si falta "result"
         if (!$postData->has('result') || $postData->get('result') === null || $postData->get('result') === '') {
             return Utils::errorMessage(Response::HTTP_UNPROCESSABLE_ENTITY, null, $format);
         }
@@ -60,19 +60,35 @@ class ApiResultsCommandController extends AbstractController implements ApiResul
             return Utils::errorMessage(Response::HTTP_BAD_REQUEST, 'BAD REQUEST: invalid result', $format);
         }
 
-        /** @var User $me */
-        $me = $this->getUser();
+        /** @var User $authUser */
+        $authUser = $this->getUser();
+
+        $user = $this->entityManager
+            ->getRepository(User::class)
+            ->find($authUser->getId());
+
+        if (!$user instanceof User) {
+            return Utils::errorMessage(
+                Response::HTTP_UNAUTHORIZED,
+                'UNAUTHORIZED: Invalid credentials.',
+                $format
+            );
+        }
 
         $result = new Result();
-        $result->setUser($me);
+        $result->setUser($user);
         $result->setResult((int) $postData->get('result'));
 
         if ($postData->has('time') && !empty($postData->get('time'))) {
             try {
-                $dt = new \DateTimeImmutable(strval($postData->get('time')));
+                $dt = new \DateTime(strval($postData->get('time')));
                 $result->setTime($dt);
             } catch (\Throwable) {
-                return Utils::errorMessage(Response::HTTP_BAD_REQUEST, 'BAD REQUEST: invalid time', $format);
+                return Utils::errorMessage(
+                    Response::HTTP_BAD_REQUEST,
+                    'BAD REQUEST: invalid time',
+                    $format
+                );
             }
         }
 
