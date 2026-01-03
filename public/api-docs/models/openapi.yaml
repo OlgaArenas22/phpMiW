@@ -268,7 +268,6 @@ paths:
           headers:
             Allow:
               $ref: '#/components/headers/Allow'
-
   /results:
     get:
       tags: [ '📊 Results' ]
@@ -328,7 +327,6 @@ paths:
           headers:
             Allow:
               $ref: '#/components/headers/Allow'
-
   '/results/{resultId}':
     get:
       tags: [ '📊 Results' ]
@@ -436,7 +434,6 @@ components:
           _links:
             parent: { href: /api/v1/users }
             self: { href: /api/v1/users/1508 }
-
     Result:
       type: object
       properties:
@@ -462,7 +459,6 @@ components:
           result: 123
           time: '2026-01-03T12:00:00+01:00'
           userId: 1508
-
     Message:
       type: object
       description: HTTP response message
