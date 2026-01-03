@@ -7,6 +7,14 @@ use Symfony\Component\HttpFoundation\{Request, Response};
 interface ApiResultsCommandInterface
 {
     /**
+     * **POST** action
+     * Summary: Creates a Result resource.
+     *
+     * @param Request $request request
+     */
+    public function postAction(Request $request): Response;
+
+    /**
      * **DELETE** Action
      * Summary: Removes the Result resource.
      *
