@@ -39,7 +39,7 @@ class Result implements JsonSerializable
 
     public function __construct()
     {
-        $this->time = new \DateTimeImmutable();
+        $this->time = new \DateTime();
     }
 
     public function getId(): ?int

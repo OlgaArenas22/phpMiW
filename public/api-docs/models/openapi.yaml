@@ -316,6 +316,31 @@ paths:
           $ref: '#/components/responses/401_Unauthorized_Response'
         '404':
           $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    post:
+      tags: [ '📊 Results' ]
+      summary: Creates a Result resource.
+      description: 'Creates a new result for the authenticated user.'
+      operationId: api_results_post
+      security:
+        - MiWApiSecurity: []
+      requestBody:
+        $ref: '#/components/requestBodies/ResultRequestBody'
+      responses:
+        '201':
+          description: '`Created`: result created'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Result'
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+        '400':
+          $ref: '#/components/responses/400_Result_BadRequest_Response'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '422':
+          $ref: '#/components/responses/422_Result_UnprocessableEntity_Response'
     options:
       tags: [ '📊 Results' ]
       summary: Provides the list of HTTP supported methods.
@@ -417,7 +442,6 @@ components:
     Allow:
       description: List of HTTP supported methods
       schema: { type: string }
-
   schemas:
     User:
       type: object
@@ -535,6 +559,27 @@ components:
           schema: { $ref: '#/components/schemas/Message' }
           examples:
             response-422: { $ref: '#/components/examples/response-422' }
+    400_Result_BadRequest_Response:
+      description: "`BAD REQUEST`: invalid result or time format"
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Message' }
+          examples:
+            response-400-result:
+              value:
+                code: 400
+                message: 'BAD REQUEST: invalid result or time format'
+    422_Result_UnprocessableEntity_Response:
+      description: "`UNPROCESSABLE ENTITY`: result is left out"
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Message' }
+          examples:
+            response-422-result:
+              value:
+                code: 422
+                message: 'UNPROCESSABLE ENTITY: result is left out'
+
 
   requestBodies:
     UserRequestBody:
@@ -569,6 +614,26 @@ components:
             properties:
               email: { description: 'User email', type: string, format: email }
               password: { description: 'User password', type: string, format: password }
+    ResultRequestBody:
+      description: '`Result` data'
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                description: 'Result value'
+                type: integer
+                format: int64
+              time:
+                description: 'Timestamp (optional)'
+                type: string
+                format: date-time
+          examples:
+            result:
+              result: 123
+              time: '2026-01-03T12:00:00+01:00'
 
   parameters:
     userId:
