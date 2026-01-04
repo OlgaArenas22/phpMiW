@@ -269,6 +269,53 @@ paths:
             Allow:
               $ref: '#/components/headers/Allow'
 
+  /users/best:
+    get:
+      tags: [ '👥 Users' ]
+      summary: Retrieves the user(s) with the highest result.
+      description: 'Only ROLE_ADMIN. If several results share the maximum value, all of them are returned.'
+      operationId: api_users_best
+      security:
+        - MiWApiSecurity: []
+      responses:
+        '200':
+          description: 'Best results'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BestUsers'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '403':
+          $ref: '#/components/responses/403_Forbidden_Response'
+        '404':
+          $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    head:
+      tags: [ '👥 Users' ]
+      summary: Retrieves the user(s) with the highest result.
+      operationId: api_users_best_head
+      security:
+        - MiWApiSecurity: []
+      responses:
+        '200':
+          description: '&lt;Response body is empty&gt;'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+    options:
+      tags: [ '👥 Users' ]
+      summary: Provides the list of HTTP supported methods.
+      operationId: api_users_best_options
+      responses:
+        '204':
+          description: '`Allow` header _<Response body is empty>_'
+          headers:
+            Allow:
+              $ref: '#/components/headers/Allow'
+
   /results:
     get:
       tags: [ '📊 Results' ]
@@ -692,6 +739,7 @@ components:
       example:
         code: 200
         message: Ok
+
     ResultStats:
       type: object
       properties:
@@ -719,6 +767,29 @@ components:
         min: 80
         max: 150
         avg: 112.33
+
+    BestUsers:
+      type: object
+      properties:
+        bestResults:
+          type: array
+          items:
+            type: object
+            properties:
+              result:
+                $ref: '#/components/schemas/Result'
+      example:
+        bestResults:
+          - result:
+              id: 77
+              result: 999
+              time: '2026-01-03T12:00:00+01:00'
+              userId: 1508
+          - result:
+              id: 88
+              result: 999
+              time: '2026-01-02T18:30:00+01:00'
+              userId: 1510
 
   responses:
     400_BadRequest_Response:

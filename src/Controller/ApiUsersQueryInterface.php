@@ -38,4 +38,18 @@ interface ApiUsersQueryInterface
      * @param  int|null $userId User id
      */
     public function optionsAction(?int $userId): Response;
+
+    /**
+     * **GET BEST** Action
+     * Summary: Retrieves the user(s) with the highest result.
+     *
+     * Only ROLE_ADMIN.
+     */
+    public function bestAction(Request $request): Response;
+
+    /**
+     * **OPTIONS BEST** Action
+     * Summary: Provides the list of HTTP supported methods for /users/best
+     */
+    public function optionsBestAction(): Response;
 }
