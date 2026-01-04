@@ -38,4 +38,20 @@ class ResultRepository extends ServiceEntityRepository
         $result = $this->find($id);
         return $result;
     }
+
+    public function findTopResults(?int $userId, int $limit = 10): array
+    {
+        $qb = $this->createQueryBuilder('r')
+            ->orderBy('r.result', 'DESC')
+            ->addOrderBy('r.time', 'DESC')
+            ->setMaxResults($limit);
+
+        if (null !== $userId) {
+            $qb->join('r.user', 'u')
+            ->andWhere('u.id = :uid')
+            ->setParameter('uid', $userId);
+        }
+
+        return $qb->getQuery()->getResult();
+    }
 }
