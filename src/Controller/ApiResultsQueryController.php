@@ -10,6 +10,8 @@ use JsonException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\{Request, Response};
 use Symfony\Component\Routing\Attribute\Route;
+use App\Repository\ResultRepository;
+
 
 use function in_array;
 
