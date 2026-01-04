@@ -54,4 +54,30 @@ class ResultRepository extends ServiceEntityRepository
 
         return $qb->getQuery()->getResult();
     }
+
+    public function getStats(?int $userId): array
+    {
+        $qb = $this->createQueryBuilder('r')
+            ->select(
+                'COUNT(r.id) AS count',
+                'MIN(r.result) AS min',
+                'MAX(r.result) AS max',
+                'AVG(r.result) AS avg'
+            );
+
+        if (null !== $userId) {
+            $qb->join('r.user', 'u')
+            ->andWhere('u.id = :uid')
+            ->setParameter('uid', $userId);
+        }
+
+        $row = $qb->getQuery()->getSingleResult();
+
+        return [
+            'count' => (int) ($row['count'] ?? 0),
+            'min'   => (null === $row['min']) ? null : (int) $row['min'],
+            'max'   => (null === $row['max']) ? null : (int) $row['max'],
+            'avg'   => (null === $row['avg']) ? null : (float) $row['avg'],
+        ];
+    }
 }

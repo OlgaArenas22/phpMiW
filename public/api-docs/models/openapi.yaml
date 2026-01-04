@@ -537,6 +537,74 @@ paths:
             Allow:
               $ref: '#/components/headers/Allow'
 
+  /results/stats:
+    get:
+      tags: [ '📊 Results' ]
+      summary: Retrieves statistics for results (count, min, max, avg).
+      description: >
+        Returns result statistics. ROLE_USER gets only their own stats (or userId=self).
+        ROLE_ADMIN can query any userId or global stats if omitted.
+      operationId: api_results_stats
+      security:
+        - MiWApiSecurity: []
+      parameters:
+        - $ref: '#/components/parameters/statsUserId'
+      responses:
+        '200':
+          description: 'Result statistics'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stats:
+                    $ref: '#/components/schemas/ResultStats'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/400_Result_BadRequest_Response'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '403':
+          $ref: '#/components/responses/403_Forbidden_Response'
+        '404':
+          $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    head:
+      tags: [ '📊 Results' ]
+      summary: Retrieves statistics for results (count, min, max, avg).
+      description: 'Same as GET but without body.'
+      operationId: api_results_stats_head
+      security:
+        - MiWApiSecurity: []
+      parameters:
+        - $ref: '#/components/parameters/statsUserId'
+      responses:
+        '200':
+          description: '&lt;Response body is empty&gt;'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/400_Result_BadRequest_Response'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '403':
+          $ref: '#/components/responses/403_Forbidden_Response'
+        '404':
+          $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    options:
+      tags: [ '📊 Results' ]
+      summary: Provides the list of HTTP supported methods.
+      description: 'Return an Allow header with a comma separated list of HTTP supported methods.'
+      operationId: api_results_stats_options
+      responses:
+        '204':
+          description: '`Allow` header _&lt;Response body is empty&gt;_'
+          headers:
+            Allow:
+              $ref: '#/components/headers/Allow'
+
 components:
   headers:
     ETag:
@@ -624,6 +692,33 @@ components:
       example:
         code: 200
         message: Ok
+    ResultStats:
+      type: object
+      properties:
+        count:
+          description: 'Number of results'
+          type: integer
+          format: int64
+        min:
+          description: 'Minimum result value'
+          type: integer
+          format: int64
+          nullable: true
+        max:
+          description: 'Maximum result value'
+          type: integer
+          format: int64
+          nullable: true
+        avg:
+          description: 'Average result value'
+          type: number
+          format: float
+          nullable: true
+      example:
+        count: 12
+        min: 80
+        max: 150
+        avg: 112.33
 
   responses:
     400_BadRequest_Response:
@@ -790,6 +885,15 @@ components:
       schema:
         type: string
         pattern: "[0-9a-f]*"
+
+    statsUserId:
+      name: userId
+      in: query
+      description: 'Filter by user id (ROLE_ADMIN can query any; ROLE_USER only self)'
+      required: false
+      schema:
+        type: integer
+        minimum: 1
 
   examples:
     response-400:
