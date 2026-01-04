@@ -172,4 +172,92 @@ class ApiUsersQueryController extends AbstractController implements ApiUsersQuer
             ]
         );
     }
+
+    /**
+     * @throws \JsonException
+     */
+    #[Route(
+        path: "/best.{_format}",
+        name: 'best',
+        requirements: [ '_format' => "json|xml" ],
+        defaults: [ '_format' => 'json' ],
+        methods: [ Request::METHOD_GET, Request::METHOD_HEAD ],
+    )]
+    public function bestAction(Request $request): Response
+    {
+        $format = Utils::getFormat($request);
+
+        // 401
+        if (!$this->isGranted('IS_AUTHENTICATED_FULLY')) {
+            return Utils::errorMessage(
+                Response::HTTP_UNAUTHORIZED,
+                'UNAUTHORIZED: Invalid credentials.',
+                $format
+            );
+        }
+
+        // 403 
+        if (!$this->isGranted('ROLE_ADMIN')) {
+            return Utils::errorMessage(
+                Response::HTTP_FORBIDDEN,
+                'FORBIDDEN: you don\'t have permission to access',
+                $format
+            );
+        }
+
+        $repo = $this->entityManager->getRepository(\App\Entity\Result::class);
+        $bestResults = $repo->findBestResultsGlobal();
+
+        // 404 
+        if (empty($bestResults)) {
+            return Utils::errorMessage(Response::HTTP_NOT_FOUND, null, $format);
+        }
+
+        $payload = [
+            'bestResults' => array_map(
+                fn ($r) => ['result' => $r],
+                $bestResults
+            ),
+        ];
+
+        // ETag
+        $etag = md5(json_encode($payload, JSON_THROW_ON_ERROR));
+        if (($etags = $request->getETags()) &&
+            (in_array($etag, $etags, true) || in_array('*', $etags, true))) {
+            return (new Response())->setNotModified(); // 304
+        }
+
+        return Utils::apiResponse(
+            Response::HTTP_OK,
+            ($request->isMethod(Request::METHOD_GET)) ? $payload : null,
+            $format,
+            [
+                'Cache-Control' => 'private',
+                'ETag' => $etag,
+            ]
+        );
+    }
+
+    #[Route(
+        path: "/best.{_format}",
+        name: 'options_best',
+        requirements: [ '_format' => "json|xml" ],
+        defaults: [ '_format' => 'json' ],
+        methods: [ Request::METHOD_OPTIONS ],
+    )]
+    public function optionsBestAction(): Response
+    {
+        return new Response(
+            null,
+            Response::HTTP_NO_CONTENT,
+            [
+                'Allow' => implode(',', [
+                    Request::METHOD_GET,
+                    Request::METHOD_HEAD,
+                    Request::METHOD_OPTIONS
+                ]),
+                'Cache-Control' => 'public, inmutable'
+            ]
+        );
+    }
 }

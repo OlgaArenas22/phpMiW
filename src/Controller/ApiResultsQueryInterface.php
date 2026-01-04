@@ -66,5 +66,4 @@ interface ApiResultsQueryInterface
      * Summary: Provides the list of HTTP supported methods for /results/stats
      */
     public function optionsStatsAction(): Response;
-
 }

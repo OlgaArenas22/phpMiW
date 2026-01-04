@@ -80,4 +80,25 @@ class ResultRepository extends ServiceEntityRepository
             'avg'   => (null === $row['avg']) ? null : (float) $row['avg'],
         ];
     }
+
+    public function findBestResultsGlobal(): array
+    {
+        $maxResult = $this->createQueryBuilder('r')
+            ->select('MAX(r.result)')
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        if ($maxResult === null) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('r')
+            ->addSelect('u')
+            ->join('r.user', 'u')
+            ->andWhere('r.result = :max')
+            ->setParameter('max', (int) $maxResult)
+            ->orderBy('r.time', 'DESC')
+            ->getQuery()
+            ->getResult();
+    }
 }
