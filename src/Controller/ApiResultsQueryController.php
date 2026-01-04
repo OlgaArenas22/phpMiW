@@ -316,4 +316,116 @@ class ApiResultsQueryController extends AbstractController implements ApiResults
             ]
         );
     }
+
+    /**
+     * @throws \JsonException
+     */
+    #[Route(
+        path: "/stats.{_format}",
+        name: 'stats',
+        requirements: [
+            '_format' => "json|xml"
+        ],
+        defaults: [ '_format' => 'json' ],
+        methods: [ Request::METHOD_GET, Request::METHOD_HEAD ],
+    )]
+    public function statsAction(Request $request): Response
+    {
+        $format = Utils::getFormat($request);
+
+        // 401
+        if (!$this->isGranted('IS_AUTHENTICATED_FULLY')) {
+            return Utils::errorMessage(
+                Response::HTTP_UNAUTHORIZED,
+                'UNAUTHORIZED: Invalid credentials.',
+                $format
+            );
+        }
+
+        // userId (optional)
+        $userIdRaw = $request->query->get('userId');
+        $requestedUserId = null;
+        if (null !== $userIdRaw && $userIdRaw !== '') {
+            if (!is_numeric($userIdRaw)) {
+                return Utils::errorMessage(Response::HTTP_BAD_REQUEST, 'BAD REQUEST: invalid userId', $format);
+            }
+            $requestedUserId = (int) $userIdRaw;
+        }
+
+        /** @var User $me */
+        $me = $this->getUser();
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+
+        // Scope:
+        // - USER: if userId missing -> own; if userId != me -> 403
+        // - ADMIN: if userId missing -> global (null); if userId present -> that user
+        $filterUserId = null;
+
+        if ($isAdmin) {
+            $filterUserId = $requestedUserId; // null => global
+        } else {
+            if (null === $requestedUserId) {
+                $filterUserId = $me->getId();
+            } else {
+                if ($requestedUserId !== $me->getId()) {
+                    return Utils::errorMessage(
+                        Response::HTTP_FORBIDDEN,
+                        'FORBIDDEN: you don\'t have permission to access',
+                        $format
+                    );
+                }
+                $filterUserId = $requestedUserId;
+            }
+        }
+
+        /** @var ResultRepository $repo */
+        $repo = $this->entityManager->getRepository(Result::class);
+        $stats = $repo->getStats($filterUserId);
+
+        // Si no hay resultados en ese scope => 404 
+        if (($stats['count'] ?? 0) === 0) {
+            return Utils::errorMessage(Response::HTTP_NOT_FOUND, null, $format);
+        }
+
+        // ETag caching
+        $etag = md5((string) json_encode($stats, JSON_THROW_ON_ERROR));
+        if (($etags = $request->getETags()) && (in_array($etag, $etags, true) || in_array('*', $etags, true))) {
+            return (new Response())->setNotModified(); // 304
+        }
+
+        return Utils::apiResponse(
+            Response::HTTP_OK,
+            ($request->isMethod(Request::METHOD_GET))
+                ? [ 'stats' => $stats ]
+                : null,
+            $format,
+            [
+                'Cache-Control' => 'private',
+                'ETag' => $etag,
+            ]
+        );
+    }
+
+    #[Route(
+        path: "/stats.{_format}",
+        name: 'options_stats',
+        requirements: [
+            '_format' => "json|xml"
+        ],
+        defaults: [ '_format' => 'json' ],
+        methods: [ Request::METHOD_OPTIONS ],
+    )]
+    public function optionsStatsAction(): Response
+    {
+        $methods = [ Request::METHOD_GET, Request::METHOD_HEAD, Request::METHOD_OPTIONS ];
+
+        return new Response(
+            null,
+            Response::HTTP_NO_CONTENT,
+            [
+                'Allow' => implode(',', $methods),
+                'Cache-Control' => 'public, inmutable'
+            ]
+        );
+    }
 }
