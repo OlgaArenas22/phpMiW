@@ -6,6 +6,9 @@ use App\Entity\User;
 use Faker\Factory as FakerFactoryAlias;
 use Generator;
 use JetBrains\PhpStorm\ArrayShape;
+use App\Repository\ResultRepository;
+use App\Entity\Result;
+use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\{CoversClass, DataProvider, Depends, Group};
 use Symfony\Component\HttpFoundation\{ Request, Response };
 
@@ -18,10 +21,49 @@ class ApiUsersControllerTest extends BaseTestCase
     /** @var array<string,string> $adminHeaders */
     private static array $adminHeaders;
 
+    public function testBestAction404NotFound(): void
+    {
+        $headers = $this->getTokenHeaders(
+            self::$role_admin[User::EMAIL_ATTR],
+            self::$role_admin[User::PASSWD_ATTR]
+        );
+
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+        $em->createQuery('DELETE FROM App\Entity\Result r')->execute();
+
+        self::$client->request(
+            Request::METHOD_GET,
+            self::RUTA_API . '/best.json',
+            [],
+            [],
+            $headers
+        );
+
+        $this->checkResponseErrorMessage(
+            self::$client->getResponse(),
+            Response::HTTP_NOT_FOUND
+        );
+    }
+
+    private static function createBestFixtures(): void
+    {
+        $em = self::getContainer()->get(EntityManagerInterface::class);
+
+        $admin = $em->getRepository(User::class)->findOneBy([User::EMAIL_ATTR => self::$role_admin[User::EMAIL_ATTR]]);
+        if (!$admin instanceof User) {
+            return;
+        }
+
+        $r1 = (new Result())->setUser($admin)->setResult(999)->setTime(new \DateTime('2020-01-01T00:00:00+00:00'));
+        $r2 = (new Result())->setUser($admin)->setResult(888)->setTime(new \DateTime('2020-01-02T00:00:00+00:00'));
+
+        $em->persist($r1);
+        $em->persist($r2);
+        $em->flush();
+    }
+
     /**
      * Test OPTIONS /users[/userId] 204 No Content
-     *
-     * @return void
      */
     public function testOptionsUserAction204NoContent(): void
     {
@@ -32,10 +74,7 @@ class ApiUsersControllerTest extends BaseTestCase
         );
         $response = self::$client->getResponse();
 
-        self::assertSame(
-            Response::HTTP_NO_CONTENT,
-            $response->getStatusCode()
-        );
+        self::assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
         self::assertNotEmpty($response->headers->get('Allow'));
 
         // OPTIONS /api/v1/users/{id}
@@ -43,37 +82,16 @@ class ApiUsersControllerTest extends BaseTestCase
             Request::METHOD_OPTIONS,
             self::RUTA_API . '/' . self::$faker->numberBetween(1, 100)
         );
+        $response = self::$client->getResponse(); // <-- IMPORTANTE: refrescar
 
-        self::assertSame(
-            Response::HTTP_NO_CONTENT,
-            $response->getStatusCode()
-        );
+        self::assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
         self::assertNotEmpty($response->headers->get('Allow'));
     }
-
-//    /**
-//     * Test GET /users 404 Not Found
-//     *
-//     * @return void
-//     */
-//    public function testCGetAction404(): void
-//    {
-//        $headers = [];
-//        self::$client->request(
-//            Request::METHOD_GET,
-//            self::RUTA_API,
-//            [],
-//            [],
-//            $headers
-//        );
-//        $response = self::$client->getResponse();
-//        $this->checkResponseErrorMessage($response, Response::HTTP_NOT_FOUND);
-//    }
 
     /**
      * Test POST /users 201 Created
      *
-     * @return array<string,string> user data
+     * @return array<string,mixed> user data
      */
     public function testPostUserAction201Created(): array
     {
@@ -87,7 +105,6 @@ class ApiUsersControllerTest extends BaseTestCase
             self::$role_admin[User::PASSWD_ATTR]
         );
 
-        // 201
         self::$client->request(
             Request::METHOD_POST,
             self::RUTA_API,
@@ -102,13 +119,11 @@ class ApiUsersControllerTest extends BaseTestCase
         self::assertTrue($response->isSuccessful());
         self::assertNotNull($response->headers->get('Location'));
         self::assertJson(strval($response->getContent()));
+
         $user = json_decode(strval($response->getContent()), true)[User::USER_ATTR];
         self::assertNotEmpty($user['id']);
         self::assertSame($p_data[User::EMAIL_ATTR], $user[User::EMAIL_ATTR]);
-        self::assertContains(
-            $p_data[User::ROLES_ATTR][0],
-            $user[User::ROLES_ATTR]
-        );
+        self::assertContains($p_data[User::ROLES_ATTR][0], $user[User::ROLES_ATTR]);
 
         return $user;
     }
@@ -137,22 +152,12 @@ class ApiUsersControllerTest extends BaseTestCase
      * Test GET /users 304 NOT MODIFIED
      *
      * @param string $etag returned by testCGetUserAction200Ok
-     *
      */
     #[Depends('testCGetUserAction200Ok')]
     public function testCGetUserAction304NotModified(string $etag): void
     {
-        $headers = array_merge(
-            self::$adminHeaders,
-            [ 'HTTP_If-None-Match' => [$etag] ]
-        );
-        self::$client->request(
-            Request::METHOD_GET,
-            self::RUTA_API,
-            [],
-            [],
-            $headers
-        );
+        $headers = array_merge(self::$adminHeaders, [ 'HTTP_If-None-Match' => [$etag] ]);
+        self::$client->request(Request::METHOD_GET, self::RUTA_API, [], [], $headers);
         $response = self::$client->getResponse();
         self::assertSame(Response::HTTP_NOT_MODIFIED, $response->getStatusCode());
     }
@@ -160,8 +165,7 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test GET /users 200 Ok (with XML header)
      *
-     * @param   array<string,string> $user user returned by testPostUserAction201()
-     * @return  void
+     * @param array<string,mixed> $user
      */
     #[Depends('testPostUserAction201Created')]
     public function testCGetUserAction200XmlOk(array $user): void
@@ -171,10 +175,7 @@ class ApiUsersControllerTest extends BaseTestCase
             self::RUTA_API . '/' . $user['id'] . '.xml',
             [],
             [],
-            array_merge(
-                self::$adminHeaders,
-                [ 'HTTP_ACCEPT' => 'application/xml' ]
-            )
+            array_merge(self::$adminHeaders, [ 'HTTP_ACCEPT' => 'application/xml' ])
         );
         $response = self::$client->getResponse();
         self::assertTrue($response->isSuccessful(), strval($response->getContent()));
@@ -185,8 +186,8 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test GET /users/{userId} 200 Ok
      *
-     * @param   array<string,string> $user user returned by testPostUserAction201()
-     * @return  string ETag header
+     * @param array<string,mixed> $user
+     * @return string ETag
      */
     #[Depends('testPostUserAction201Created')]
     public function testGetUserAction200Ok(array $user): string
@@ -213,18 +214,15 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test GET /users/{userId} 304 NOT MODIFIED
      *
-     * @param array<string,string> $user user returned by testPostUserAction201Created()
-     * @param string $etag returned by testGetUserAction200Ok
+     * @param array<string,mixed> $user
+     * @param string $etag
      * @return string Entity Tag
      */
     #[Depends('testPostUserAction201Created')]
     #[Depends('testGetUserAction200Ok')]
     public function testGetUserAction304NotModified(array $user, string $etag): string
     {
-        $headers = array_merge(
-            self::$adminHeaders,
-            [ 'HTTP_If-None-Match' => [$etag] ]
-        );
+        $headers = array_merge(self::$adminHeaders, [ 'HTTP_If-None-Match' => [$etag] ]);
         self::$client->request(Request::METHOD_GET, self::RUTA_API . '/' . $user['id'], [], [], $headers);
         $response = self::$client->getResponse();
         self::assertSame(Response::HTTP_NOT_MODIFIED, $response->getStatusCode());
@@ -235,14 +233,14 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test POST /users 400 Bad Request
      *
-     * @param   array<string,string> $user user returned by testPostUserAction201Created()
-     * @return  array<string,string> user data
+     * @param array<string,mixed> $user
+     * @return array<string,mixed>
      */
     #[Depends('testPostUserAction201Created')]
     public function testPostUserAction400BadRequest(array $user): array
     {
         $p_data = [
-            User::EMAIL_ATTR => $user[User::EMAIL_ATTR], // mismo e-mail
+            User::EMAIL_ATTR => $user[User::EMAIL_ATTR],
             User::PASSWD_ATTR => self::$faker->password(),
         ];
         self::$client->request(
@@ -253,10 +251,7 @@ class ApiUsersControllerTest extends BaseTestCase
             self::$adminHeaders,
             strval(json_encode($p_data))
         );
-        $this->checkResponseErrorMessage(
-            self::$client->getResponse(),
-            Response::HTTP_BAD_REQUEST
-        );
+        $this->checkResponseErrorMessage(self::$client->getResponse(), Response::HTTP_BAD_REQUEST);
 
         return $user;
     }
@@ -264,9 +259,9 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test PUT /users/{userId} 209 Content Returned
      *
-     * @param   array<string,string> $user user returned by testPostUserAction201()
-     * @param   string $etag returned by testGetUserAction304NotModified()
-     * @return  array<string,string> modified user data
+     * @param array<string,mixed> $user
+     * @param string $etag
+     * @return array<string,mixed>
      */
     #[Depends('testPostUserAction201Created')]
     #[Depends('testGetUserAction304NotModified')]
@@ -286,10 +281,7 @@ class ApiUsersControllerTest extends BaseTestCase
             self::RUTA_API . '/' . $user['id'],
             [],
             [],
-            array_merge(
-                self::$adminHeaders,
-                [ 'HTTP_If-Match' => $etag ]
-            ),
+            array_merge(self::$adminHeaders, [ 'HTTP_If-Match' => $etag ]),
             strval(json_encode($p_data))
         );
         $response = self::$client->getResponse();
@@ -299,12 +291,10 @@ class ApiUsersControllerTest extends BaseTestCase
         self::assertJson($r_body);
         $user_aux = json_decode($r_body, true)[User::USER_ATTR];
         $user_aux[User::PASSWD_ATTR] = $p_data[User::PASSWD_ATTR];
+
         self::assertSame($user['id'], $user_aux['id']);
         self::assertSame($p_data[User::EMAIL_ATTR], $user_aux[User::EMAIL_ATTR]);
-        self::assertContains(
-            $role,
-            $user_aux[User::ROLES_ATTR]
-        );
+        self::assertContains($role, $user_aux[User::ROLES_ATTR]);
 
         return $user_aux;
     }
@@ -312,33 +302,23 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test PUT /users/{userId} 400 Bad Request
      *
-     * @param   array<string,string> $user user returned by testPutUserAction209()
-     * @return  void
+     * @param array<string,mixed> $user
      */
     #[Depends('testPutUserAction209ContentReturned')]
     public function testPutUserAction400BadRequest(array $user): void
     {
-        // e-mail already exists
-        $p_data = [
-            User::EMAIL_ATTR => $user[User::EMAIL_ATTR]
-        ];
-        self::$client->request(
-            Request::METHOD_HEAD,
-            self::RUTA_API . '/' . $user['id'],
-            [],
-            [],
-            self::$adminHeaders
-        );
+        $p_data = [ User::EMAIL_ATTR => $user[User::EMAIL_ATTR] ];
+
+        // get etag
+        self::$client->request(Request::METHOD_HEAD, self::RUTA_API . '/' . $user['id'], [], [], self::$adminHeaders);
         $etag = self::$client->getResponse()->getEtag();
+
         self::$client->request(
             Request::METHOD_PUT,
             self::RUTA_API . '/' . $user['id'],
             [],
             [],
-            array_merge(
-                self::$adminHeaders,
-                [ 'HTTP_If-Match' => $etag ]
-            ),
+            array_merge(self::$adminHeaders, [ 'HTTP_If-Match' => $etag ]),
             strval(json_encode($p_data))
         );
         $response = self::$client->getResponse();
@@ -348,8 +328,7 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test PUT /users/{userId} 412 PRECONDITION_FAILED
      *
-     * @param   array<string,string> $user user returned by testPutUserAction209ContentReturned()
-     * @return  void
+     * @param array<string,mixed> $user
      */
     #[Depends('testPutUserAction209ContentReturned')]
     public function testPutUserAction412PreconditionFailed(array $user): void
@@ -368,39 +347,25 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test PUT /users/{userId} 403 FORBIDDEN - try to promote the user to admin role
      *
-     * @param string[] $user returned by testPutUserAction209ContentReturned()
-     * @return  void
+     * @param array<string,mixed> $user
      */
     #[Depends('testPutUserAction209ContentReturned')]
     public function testPutUserAction403Forbidden(array $user): void
     {
-        $userHeaders = $this->getTokenHeaders(
-            $user[User::EMAIL_ATTR],
-            $user[User::PASSWD_ATTR]
-        );
-        // get the user's etag
-        self::$client->request(
-            Request::METHOD_HEAD,
-            self::RUTA_API . '/' . $user['id'],
-            [],
-            [],
-            $userHeaders
-        );
+        $userHeaders = $this->getTokenHeaders($user[User::EMAIL_ATTR], $user[User::PASSWD_ATTR]);
+
+        // get user's etag
+        self::$client->request(Request::METHOD_HEAD, self::RUTA_API . '/' . $user['id'], [], [], $userHeaders);
         $etag = self::$client->getResponse()->getEtag();
 
-        // try to promote the user to admin role
-        $p_data = [
-            User::ROLES_ATTR => [ 'ROLE_ADMIN' ],
-        ];
+        $p_data = [ User::ROLES_ATTR => [ 'ROLE_ADMIN' ] ];
+
         self::$client->request(
             Request::METHOD_PUT,
             self::RUTA_API . '/' . $user['id'],
             [],
             [],
-            array_merge(
-                $userHeaders,
-                [ 'HTTP_If-Match' => $etag ]
-            ),
+            array_merge($userHeaders, [ 'HTTP_If-Match' => $etag ]),
             strval(json_encode($p_data))
         );
         $response = self::$client->getResponse();
@@ -410,8 +375,8 @@ class ApiUsersControllerTest extends BaseTestCase
     /**
      * Test DELETE /users/{userId} 204 No Content
      *
-     * @param   array<string,string> $user user returned by testPostUserAction400BadRequest()
-     * @return  int userId
+     * @param array<string,mixed> $user
+     * @return int userId
      */
     #[Depends('testPostUserAction400BadRequest')]
     #[Depends('testPutUserAction412PreconditionFailed')]
@@ -429,10 +394,7 @@ class ApiUsersControllerTest extends BaseTestCase
         );
         $response = self::$client->getResponse();
 
-        self::assertSame(
-            Response::HTTP_NO_CONTENT,
-            $response->getStatusCode()
-        );
+        self::assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
         self::assertEmpty($response->getContent());
 
         return intval($user['id']);
@@ -440,19 +402,12 @@ class ApiUsersControllerTest extends BaseTestCase
 
     /**
      * Test POST /users 422 Unprocessable Entity
-     *
-     * @param null|string $email
-     * @param null|string $password
-     * @return void
      */
     #[Depends('testPutUserAction209ContentReturned')]
     #[DataProvider('userProvider422')]
     public function testPostUserAction422UnprocessableEntity(?string $email, ?string $password): void
     {
-        $p_data = [
-            User::EMAIL_ATTR => $email,
-            User::PASSWD_ATTR => $password
-        ];
+        $p_data = [ User::EMAIL_ATTR => $email, User::PASSWD_ATTR => $password ];
 
         self::$client->request(
             Request::METHOD_POST,
@@ -467,15 +422,7 @@ class ApiUsersControllerTest extends BaseTestCase
     }
 
     /**
-     * Test GET    /users 401 UNAUTHORIZED
-     * Test POST   /users 401 UNAUTHORIZED
-     * Test GET    /users/{userId} 401 UNAUTHORIZED
-     * Test PUT    /users/{userId} 401 UNAUTHORIZED
-     * Test DELETE /users/{userId} 401 UNAUTHORIZED
-     *
-     * @param string $method
-     * @param string $uri
-     * @return void
+     * 401 UNAUTHORIZED routes
      */
     #[DataProvider('providerRoutes401')]
     public function testUserStatus401Unauthorized(string $method, string $uri): void
@@ -487,20 +434,11 @@ class ApiUsersControllerTest extends BaseTestCase
             [],
             [ 'HTTP_ACCEPT' => 'application/json' ]
         );
-        $this->checkResponseErrorMessage(
-            self::$client->getResponse(),
-            Response::HTTP_UNAUTHORIZED
-        );
+        $this->checkResponseErrorMessage(self::$client->getResponse(), Response::HTTP_UNAUTHORIZED);
     }
 
     /**
-     * Test GET    /users/{userId} 404 NOT FOUND
-     * Test PUT    /users/{userId} 404 NOT FOUND
-     * Test DELETE /users/{userId} 404 NOT FOUND
-     *
-     * @param string $method
-     * @param int $userId user id. returned by testDeleteUserAction204()
-     * @return void
+     * 404 NOT FOUND routes (after delete)
      */
     #[Depends('testDeleteUserAction204NoContent')]
     #[DataProvider('providerRoutes404')]
@@ -513,20 +451,11 @@ class ApiUsersControllerTest extends BaseTestCase
             [],
             self::$adminHeaders
         );
-        $this->checkResponseErrorMessage(
-            self::$client->getResponse(),
-            Response::HTTP_NOT_FOUND
-        );
+        $this->checkResponseErrorMessage(self::$client->getResponse(), Response::HTTP_NOT_FOUND);
     }
 
     /**
-     * Test POST   /users 403 FORBIDDEN
-     * Test PUT    /users/{userId} 403 FORBIDDEN
-     * Test DELETE /users/{userId} 403 FORBIDDEN
-     *
-     * @param string $method
-     * @param string $uri
-     * @return void
+     * 403 FORBIDDEN routes for ROLE_USER
      */
     #[DataProvider('providerRoutes403')]
     public function testUserStatus403Forbidden(string $method, string $uri): void
@@ -536,17 +465,161 @@ class ApiUsersControllerTest extends BaseTestCase
             self::$role_user[User::PASSWD_ATTR]
         );
         self::$client->request($method, $uri, [], [], $userHeaders);
+        $this->checkResponseErrorMessage(self::$client->getResponse(), Response::HTTP_FORBIDDEN);
+    }
+    
+    /**
+     * Test OPTIONS /users/best 204 No Content
+     */
+    public function testOptionsBestAction204NoContent(): void
+    {
+        self::$client->request(Request::METHOD_OPTIONS, self::RUTA_API . '/best.json');
+        $response = self::$client->getResponse();
+
+        self::assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
+        self::assertNotEmpty($response->headers->get('Allow'));
+        self::assertStringContainsString(Request::METHOD_GET, $response->headers->get('Allow'));
+        self::assertStringContainsString(Request::METHOD_HEAD, $response->headers->get('Allow'));
+        self::assertStringContainsString(Request::METHOD_OPTIONS, $response->headers->get('Allow'));
+    }
+
+    public function testBestAction200Ok(): string
+    {
+        if (empty(self::$adminHeaders)) {
+            self::$adminHeaders = $this->getTokenHeaders(
+                self::$role_admin[User::EMAIL_ATTR],
+                self::$role_admin[User::PASSWD_ATTR]
+            );
+        }
+
+        self::createBestFixtures();
+
+        self::$client->request(Request::METHOD_GET, self::RUTA_API . '/best.json', [], [], self::$adminHeaders);
+        $response = self::$client->getResponse();
+
+        self::assertSame(Response::HTTP_OK, $response->getStatusCode());
+        self::assertTrue($response->isSuccessful());
+        self::assertNotNull($response->getEtag());
+
+        $body = (string) $response->getContent();
+        self::assertJson($body);
+
+        $data = json_decode($body, true);
+        self::assertArrayHasKey('bestResults', $data);
+        self::assertIsArray($data['bestResults']);
+        self::assertNotEmpty($data['bestResults']);
+        self::assertArrayHasKey('result', $data['bestResults'][0]);
+
+        return (string) $response->getEtag();
+    }
+
+    public function testBestAction200XmlOk(): void
+    {
+        if (empty(self::$adminHeaders)) {
+            self::$adminHeaders = $this->getTokenHeaders(
+                self::$role_admin[User::EMAIL_ATTR],
+                self::$role_admin[User::PASSWD_ATTR]
+            );
+        }
+
+        self::createBestFixtures();
+
+        self::$client->request(
+            Request::METHOD_GET,
+            self::RUTA_API . '/best.xml',
+            [],
+            [],
+            array_merge(self::$adminHeaders, [ 'HTTP_ACCEPT' => 'application/xml' ])
+        );
+        $response = self::$client->getResponse();
+
+        self::assertTrue($response->isSuccessful(), (string) $response->getContent());
+        self::assertNotNull($response->getEtag());
+        self::assertTrue($response->headers->contains('content-type', 'application/xml'));
+    }
+
+    public function testBestHeadAction200Ok(): void
+    {
+        if (empty(self::$adminHeaders)) {
+            self::$adminHeaders = $this->getTokenHeaders(
+                self::$role_admin[User::EMAIL_ATTR],
+                self::$role_admin[User::PASSWD_ATTR]
+            );
+        }
+
+        self::createBestFixtures();
+
+        self::$client->request(Request::METHOD_HEAD, self::RUTA_API . '/best.json', [], [], self::$adminHeaders);
+        $response = self::$client->getResponse();
+
+        self::assertSame(Response::HTTP_OK, $response->getStatusCode());
+        self::assertNotNull($response->getEtag());
+        self::assertSame('', (string) $response->getContent());
+    }
+
+    public function testBestAction401Unauthorized(): void
+    {
+        self::$client->request(
+            Request::METHOD_GET,
+            self::RUTA_API . '/best.json',
+            [],
+            [],
+            ['HTTP_ACCEPT' => 'application/json']
+        );
+
+        $this->checkResponseErrorMessage(
+            self::$client->getResponse(),
+            Response::HTTP_UNAUTHORIZED
+        );
+    }
+
+    public function testBestAction403Forbidden(): void
+    {
+        $headers = $this->getTokenHeaders(
+            self::$role_user[User::EMAIL_ATTR],
+            self::$role_user[User::PASSWD_ATTR]
+        );
+
+        self::$client->request(
+            Request::METHOD_GET,
+            self::RUTA_API . '/best.json',
+            [],
+            [],
+            $headers
+        );
+
         $this->checkResponseErrorMessage(
             self::$client->getResponse(),
             Response::HTTP_FORBIDDEN
         );
     }
 
-    /**
-     * * * * * * * * * *
-     * P R O V I D E R S
-     * * * * * * * * * *
-     */
+    public function testBestAction304NotModifiedWithWildcard(): void
+    {
+        $headers = $this->getTokenHeaders(
+            self::$role_admin[User::EMAIL_ATTR],
+            self::$role_admin[User::PASSWD_ATTR]
+        );
+
+        self::createBestFixtures();
+
+        self::$client->request(
+            Request::METHOD_GET,
+            self::RUTA_API . '/best.json',
+            [],
+            [],
+            array_merge($headers, ['HTTP_If-None-Match' => ['*']])
+        );
+
+        self::assertSame(
+            Response::HTTP_NOT_MODIFIED,
+            self::$client->getResponse()->getStatusCode()
+        );
+    }
+
+    // ============================================================
+    // PROVIDERS
+    // ============================================================
 
     /**
      * User provider (incomplete) -> 422 status code
