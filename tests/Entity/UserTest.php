@@ -36,8 +36,6 @@ class UserTest extends TestCase
 
     /**
      * Implement testConstructor().
-     *
-     * @return void
      */
     public function testConstructor(): void
     {
@@ -45,16 +43,33 @@ class UserTest extends TestCase
         self::assertEmpty($n_usuario->getUserIdentifier());
         self::assertEmpty($n_usuario->getEmail());
         self::assertSame(0, $n_usuario->getId());
-        self::assertContains(
-            'ROLE_USER',
-            $n_usuario->getRoles()
-        );
+        self::assertContains('ROLE_USER', $n_usuario->getRoles());
+    }
+
+    /**
+     * Constructor with params should set email/password/roles.
+     *
+     * @throws Exception
+     */
+    public function testConstructorWithParams(): void
+    {
+        $email = self::$faker->email();
+        $password = self::$faker->password(minLength: 20);
+        $roles = [ 'ROLE_ADMIN' ];
+
+        $user = new User(email: $email, password: $password, roles: $roles);
+
+        self::assertSame($email, $user->getEmail());
+        self::assertSame($email, $user->getUserIdentifier());
+        self::assertSame($password, $user->getPassword());
+
+        // getRoles() always adds ROLE_USER and uniques
+        self::assertContains('ROLE_ADMIN', $user->getRoles());
+        self::assertContains('ROLE_USER', $user->getRoles());
     }
 
     /**
      * Implement testGetId().
-     *
-     * @return void
      */
     public function testGetId(): void
     {
@@ -68,50 +83,127 @@ class UserTest extends TestCase
      * Implements testGetSetEmail().
      *
      * @throws Exception
-     * @return void
      */
     public function testGetSetEmail(): void
     {
         $userEmail = self::$faker->email();
         self::$usuario->setEmail($userEmail);
-        self::assertSame(
-            $userEmail,
-            self::$usuario->getEmail()
-        );
+        self::assertSame($userEmail, self::$usuario->getEmail());
+        self::assertSame($userEmail, self::$usuario->getUserIdentifier());
     }
 
     /**
      * Implements testGetSetPassword().
      *
-     * @return void
      * @throws Exception
      */
     public function testGetSetPassword(): void
     {
         $password = self::$faker->password(minLength: 20);
         self::$usuario->setPassword($password);
-        self::assertSame(
-            $password,
-            self::$usuario->getPassword()
-        );
+        self::assertSame($password, self::$usuario->getPassword());
     }
 
     /**
      * Implement testGetSetRoles().
      *
-     * @return void
+     * @throws Exception
      */
     public function testGetSetRoles(): void
     {
-        self::assertContains(
-            'ROLE_USER',
-            self::$usuario->getRoles()
-        );
-        $role = self::$faker->word();
+        self::assertContains('ROLE_USER', self::$usuario->getRoles());
+
+        $role = strtoupper(self::$faker->word());
         self::$usuario->setRoles([ $role ]);
-        self::assertContains(
-            $role,
-            self::$usuario->getRoles()
+
+        self::assertContains($role, self::$usuario->getRoles());
+        // Always adds ROLE_USER
+        self::assertContains('ROLE_USER', self::$usuario->getRoles());
+    }
+
+    /**
+     * getRoles() must return unique roles and always include ROLE_USER.
+     */
+    public function testGetRolesAlwaysAddsRoleUserAndIsUnique(): void
+    {
+        $user = new User(
+            email: self::$faker->email(),
+            password: self::$faker->password(minLength: 20),
+            roles: [ 'ROLE_USER', 'ROLE_USER', 'ROLE_ADMIN', 'ROLE_ADMIN' ]
         );
+
+        $roles = $user->getRoles();
+
+        self::assertContains('ROLE_USER', $roles);
+        self::assertContains('ROLE_ADMIN', $roles);
+
+        // Ensure uniqueness
+        self::assertSameSize($roles, array_unique($roles));
+    }
+
+    /**
+     * eraseCredentials() should wipe sensitive temporary data.
+     * Here it resets password to '' (see implementation).
+     *
+     * @throws Exception
+     */
+    public function testEraseCredentials(): void
+    {
+        $password = self::$faker->password(minLength: 20);
+        self::$usuario->setPassword($password);
+
+        self::assertSame($password, self::$usuario->getPassword());
+
+        self::$usuario->eraseCredentials();
+
+        self::assertSame('', self::$usuario->getPassword());
+    }
+
+    /**
+     * jsonSerialize() must return the expected keys and values.
+     *
+     * @throws Exception
+     */
+    public function testJsonSerialize(): void
+    {
+        $email = self::$faker->email();
+        $roles = [ 'ROLE_ADMIN' ];
+
+        $user = new User(email: $email, password: 'hashed', roles: $roles);
+
+        $data = $user->jsonSerialize();
+
+        self::assertArrayHasKey('Id', $data);
+        self::assertArrayHasKey(User::EMAIL_ATTR, $data);
+        self::assertArrayHasKey(User::ROLES_ATTR, $data);
+
+        self::assertSame($email, $data[User::EMAIL_ATTR]);
+        
+        self::assertContains('ROLE_ADMIN', $data[User::ROLES_ATTR]);
+        self::assertContains('ROLE_USER', $data[User::ROLES_ATTR]);
+
+        self::assertSame(0, $data['Id']);
+    }
+
+    /**
+     * createFromPayload() must build a JWT user with id/email/roles from payload.
+     */
+    public function testCreateFromPayload(): void
+    {
+        $email = self::$faker->email();
+        $payload = [
+            'id' => 123,
+            'roles' => [ 'ROLE_ADMIN' ],
+        ];
+
+        $user = User::createFromPayload($email, $payload);
+
+        self::assertInstanceOf(User::class, $user);
+        self::assertSame(123, $user->getId());
+        self::assertSame($email, $user->getEmail());
+        self::assertSame($email, $user->getUserIdentifier());
+
+        self::assertContains('ROLE_ADMIN', $user->getRoles());
+        self::assertContains('ROLE_USER', $user->getRoles()); 
     }
 }
