@@ -268,6 +268,7 @@ paths:
           headers:
             Allow:
               $ref: '#/components/headers/Allow'
+
   /results:
     get:
       tags: [ '📊 Results' ]
@@ -352,6 +353,7 @@ paths:
           headers:
             Allow:
               $ref: '#/components/headers/Allow'
+
   '/results/{resultId}':
     get:
       tags: [ '📊 Results' ]
@@ -429,7 +431,7 @@ paths:
         '412':
           $ref: '#/components/responses/412_Precondition_Failed_Response'
     delete:
-      tags: ['📊 Results' ]
+      tags: [ '📊 Results' ]
       summary: Removes the Result resource.
       description: 'Deletes the result identified by `resultId`.'
       operationId: api_results_delete
@@ -460,6 +462,81 @@ paths:
             Allow:
               $ref: '#/components/headers/Allow'
 
+  /results/top:
+    get:
+      tags: [ '📊 Results' ]
+      summary: Retrieves the top results (highest values).
+      description: >
+        Returns the top N results ordered by result desc.
+        ROLE_USER gets only their own results (or userId=self). ROLE_ADMIN can query any userId or global if omitted.
+      operationId: api_results_top
+      security:
+        - MiWApiSecurity: []
+      parameters:
+        - $ref: '#/components/parameters/topLimit'
+        - $ref: '#/components/parameters/topUserId'
+      responses:
+        '200':
+          description: 'Top results'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        result:
+                          $ref: '#/components/schemas/Result'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/400_Result_BadRequest_Response'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '403':
+          $ref: '#/components/responses/403_Forbidden_Response'
+        '404':
+          $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    head:
+      tags: [ '📊 Results' ]
+      summary: Retrieves the top results (highest values).
+      description: 'Same as GET but without body.'
+      operationId: api_results_top_head
+      security:
+        - MiWApiSecurity: []
+      parameters:
+        - $ref: '#/components/parameters/topLimit'
+        - $ref: '#/components/parameters/topUserId'
+      responses:
+        '200':
+          description: '&lt;Response body is empty&gt;'
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+        '400':
+          $ref: '#/components/responses/400_Result_BadRequest_Response'
+        '401':
+          $ref: '#/components/responses/401_Unauthorized_Response'
+        '403':
+          $ref: '#/components/responses/403_Forbidden_Response'
+        '404':
+          $ref: '#/components/responses/404_Resource_Not_Found_Response'
+    options:
+      tags: [ '📊 Results' ]
+      summary: Provides the list of HTTP supported methods.
+      description: 'Return an Allow header with a comma separated list of HTTP supported methods.'
+      operationId: api_results_top_options
+      responses:
+        '204':
+          description: '`Allow` header _&lt;Response body is empty&gt;_'
+          headers:
+            Allow:
+              $ref: '#/components/headers/Allow'
+
 components:
   headers:
     ETag:
@@ -471,6 +548,7 @@ components:
     Allow:
       description: List of HTTP supported methods
       schema: { type: string }
+
   schemas:
     User:
       type: object
@@ -505,6 +583,7 @@ components:
           _links:
             parent: { href: /api/v1/users }
             self: { href: /api/v1/users/1508 }
+
     Result:
       type: object
       properties:
@@ -530,6 +609,7 @@ components:
           result: 123
           time: '2026-01-03T12:00:00+01:00'
           userId: 1508
+
     Message:
       type: object
       description: HTTP response message
@@ -588,6 +668,7 @@ components:
           schema: { $ref: '#/components/schemas/Message' }
           examples:
             response-422: { $ref: '#/components/examples/response-422' }
+
     400_Result_BadRequest_Response:
       description: "`BAD REQUEST`: invalid result or time format"
       content:
@@ -598,6 +679,7 @@ components:
               value:
                 code: 400
                 message: 'BAD REQUEST: invalid result or time format'
+
     422_Result_UnprocessableEntity_Response:
       description: "`UNPROCESSABLE ENTITY`: result is left out"
       content:
@@ -608,7 +690,6 @@ components:
               value:
                 code: 422
                 message: 'UNPROCESSABLE ENTITY: result is left out'
-
 
   requestBodies:
     UserRequestBody:
@@ -627,6 +708,7 @@ components:
                 email: User_email@example.com
                 password: User_password
                 roles: [ 'ROLE_USER', 'ROLE_ADMIN' ]
+
     LoginRequestBody:
       description: Registered user **e-mail** and **password**
       required: true
@@ -643,6 +725,7 @@ components:
             properties:
               email: { description: 'User email', type: string, format: email }
               password: { description: 'User password', type: string, format: password }
+
     ResultRequestBody:
       description: '`Result` data'
       required: true
@@ -671,12 +754,34 @@ components:
       description: 'ID of user'
       required: true
       schema: { type: integer, pattern: '^\d+$' }
+
     resultId:
       name: resultId
       in: path
       description: 'ID of result'
       required: true
       schema: { type: integer, pattern: '^\d+$' }
+
+    topLimit:
+      name: limit
+      in: query
+      description: 'Max number of results to return (default 10, min 1, max 100)'
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+
+    topUserId:
+      name: userId
+      in: query
+      description: 'Filter by user id (ROLE_ADMIN can query any; ROLE_USER only self)'
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+
     ifMatchParam:
       name: If-Match
       in: header

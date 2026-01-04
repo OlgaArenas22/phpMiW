@@ -10,6 +10,8 @@ use JsonException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\{Request, Response};
 use Symfony\Component\Routing\Attribute\Route;
+use App\Repository\ResultRepository;
+
 
 use function in_array;
 
@@ -73,12 +75,11 @@ class ApiResultsQueryController extends AbstractController implements ApiResults
                 ->findBy([ 'user' => $me ], [ $order => 'ASC' ]);
         }
 
-        // Si no hay resultados -> 404 (siguiendo el patrón de Users)
+        // Si no hay resultados -> 404
         if (empty($results)) {
             return Utils::errorMessage(Response::HTTP_NOT_FOUND, null, $format);
         }
 
-        // Caching with ETag
         $etag = md5((string) json_encode($results, JSON_THROW_ON_ERROR));
         if (($etags = $request->getETags()) && (in_array($etag, $etags) || in_array('*', $etags))) {
             return (new Response())->setNotModified(); // 304
@@ -147,7 +148,6 @@ class ApiResultsQueryController extends AbstractController implements ApiResults
             );
         }
 
-        // Caching with ETag
         $etag = md5((string) json_encode($result, JSON_THROW_ON_ERROR));
         if (($etags = $request->getETags()) && (in_array($etag, $etags) || in_array('*', $etags))) {
             return (new Response())->setNotModified(); // 304
@@ -192,6 +192,127 @@ class ApiResultsQueryController extends AbstractController implements ApiResults
             [
                 self::HEADER_ALLOW => implode(',', $methods),
                 self::HEADER_CACHE_CONTROL => 'public, inmutable'
+            ]
+        );
+    }
+
+        /**
+     * @throws \JsonException
+     */
+    #[Route(
+        path: "/top.{_format}",
+        name: 'top',
+        requirements: [
+            '_format' => "json|xml"
+        ],
+        defaults: [ '_format' => 'json' ],
+        methods: [ Request::METHOD_GET, Request::METHOD_HEAD ],
+    )]
+    public function topAction(Request $request): Response
+    {
+        $format = Utils::getFormat($request);
+
+        // 401
+        if (!$this->isGranted('IS_AUTHENTICATED_FULLY')) {
+            return Utils::errorMessage(
+                Response::HTTP_UNAUTHORIZED,
+                'UNAUTHORIZED: Invalid credentials.',
+                $format
+            );
+        }
+
+        // limit (default 10)
+        $limitRaw = $request->query->get('limit', '10');
+        if (!is_numeric($limitRaw)) {
+            return Utils::errorMessage(Response::HTTP_BAD_REQUEST, 'BAD REQUEST: invalid limit', $format);
+        }
+        $limit = (int) $limitRaw;
+        if ($limit < 1 || $limit > 100) {
+            return Utils::errorMessage(Response::HTTP_BAD_REQUEST, 'BAD REQUEST: invalid limit', $format);
+        }
+
+        // userId (optional)
+        $userIdRaw = $request->query->get('userId');
+        $requestedUserId = null;
+        if (null !== $userIdRaw && $userIdRaw !== '') {
+            if (!is_numeric($userIdRaw)) {
+                return Utils::errorMessage(Response::HTTP_BAD_REQUEST, 'BAD REQUEST: invalid userId', $format);
+            }
+            $requestedUserId = (int) $userIdRaw;
+        }
+
+        /** @var User $me */
+        $me = $this->getUser();
+        $isAdmin = $this->isGranted('ROLE_ADMIN');
+
+        // Scope:
+        // - USER: if userId missing -> own; if userId != me -> 403
+        // - ADMIN: if userId missing -> global (null); if userId present -> that user
+        $filterUserId = null;
+
+        if ($isAdmin) {
+            $filterUserId = $requestedUserId; // null => global
+        } else {
+            // normal user
+            if (null === $requestedUserId) {
+                $filterUserId = $me->getId();
+            } else {
+                if ($requestedUserId !== $me->getId()) {
+                    return Utils::errorMessage(
+                        Response::HTTP_FORBIDDEN,
+                        'FORBIDDEN: you don\'t have permission to access',
+                        $format
+                    );
+                }
+                $filterUserId = $requestedUserId;
+            }
+        }
+
+        /** @var ResultRepository $repo */
+        $repo = $this->entityManager->getRepository(Result::class);
+        $results = $repo->findTopResults($filterUserId, $limit);
+
+        if (empty($results)) {
+            return Utils::errorMessage(Response::HTTP_NOT_FOUND, null, $format);
+        }
+
+        $etag = md5((string) json_encode($results, JSON_THROW_ON_ERROR));
+        if (($etags = $request->getETags()) && (in_array($etag, $etags, true) || in_array('*', $etags, true))) {
+            return (new Response())->setNotModified(); // 304
+        }
+
+        return Utils::apiResponse(
+            Response::HTTP_OK,
+            ($request->isMethod(Request::METHOD_GET))
+                ? [ 'results' => array_map(fn ($r) => ['result' => $r], $results) ]
+                : null,
+            $format,
+            [
+                'Cache-Control' => 'private',
+                'ETag' => $etag,
+            ]
+        );
+    }
+
+    #[Route(
+        path: "/top.{_format}",
+        name: 'options_top',
+        requirements: [
+            '_format' => "json|xml"
+        ],
+        defaults: [ '_format' => 'json' ],
+        methods: [ Request::METHOD_OPTIONS ],
+    )]
+    public function optionsTopAction(): Response
+    {
+        $methods = [ Request::METHOD_GET, Request::METHOD_HEAD, Request::METHOD_OPTIONS ];
+
+        return new Response(
+            null,
+            Response::HTTP_NO_CONTENT,
+            [
+                'Allow' => implode(',', $methods),
+                'Cache-Control' => 'public, inmutable'
             ]
         );
     }

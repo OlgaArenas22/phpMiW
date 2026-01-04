@@ -35,4 +35,21 @@ interface ApiResultsQueryInterface
      * @param int|null $resultId Result id
      */
     public function optionsAction(?int $resultId): Response;
+
+        /**
+     * **GET TOP** Action
+     * Summary: Retrieves the top results (highest values).
+     *
+     * Query params:
+     * - userId (optional): filter by user (admin only if different from current user)
+     * - limit (optional): max number of results (default 10)
+     */
+    public function topAction(Request $request): Response;
+
+    /**
+     * **OPTIONS TOP** Action
+     * Summary: Provides the list of HTTP supported methods for /results/top
+     */
+    public function optionsTopAction(): Response;
+
 }
